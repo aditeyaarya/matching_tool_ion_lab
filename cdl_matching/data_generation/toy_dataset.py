@@ -11,9 +11,12 @@ from ..config import (
     MIN_MENTORS_PER_TABLE,
     MAX_MENTORS_PER_TABLE,
     NUM_MENTORS_POOL_DEFAULT,
+    FIT_SCORES_CSV_PATH,
 )
 from .mentor_factory import create_mentors_for_tables
 from .startup_factory import create_startups_with_os_oc
+from .fit_loader import load_fit_scores
+import os
 
 
 def make_toy_dataset(
@@ -31,6 +34,13 @@ def make_toy_dataset(
       - startups (each with OS and OC mentor IDs)
     """
 
+    # If CSV exists -> use it to define mentors + startups
+    if FIT_SCORES_CSV_PATH and os.path.exists(FIT_SCORES_CSV_PATH):
+        csv_mentor_ids, fit_scores = load_fit_scores(FIT_SCORES_CSV_PATH)
+    else:
+        csv_mentor_ids = None
+        fit_scores = None
+
     mentors: List[Mentor] = create_mentors_for_tables(
         num_tables=num_tables,
         seed=seed,
@@ -38,12 +48,14 @@ def make_toy_dataset(
         num_mentors_pool=num_mentors_pool,
         min_per_table=min_per_table,
         max_per_table=max_per_table,
+        csv_mentor_ids=csv_mentor_ids,
     )
 
     startups: List[Startup] = create_startups_with_os_oc(
         mentors=mentors,
         num_startups=num_startups,
         seed=seed,
+        fit_scores=fit_scores,
     )
 
     return mentors, startups

@@ -20,6 +20,19 @@ def main():
         num_mentors_pool=35,  # global pool; extra mentors conceptually unused
     )
 
+    print("MENTORS:")
+    for m in mentors:
+        print(f"ID: {m.id}, Name: {m.name}, Table: {m.table_id}, "
+            f"Domains: {', '.join(m.domains)}, OS: {m.can_be_os}, OC: {m.can_be_oc}")
+    print()
+
+    # Print Startups nicely
+    print("STARTUPS:")
+    for s in startups:
+        print(f"ID: {s.id}, Name: {s.name}, Domain: {s.domain}, "
+            f"OS Mentor: {s.os_id}, OC Mentor: {s.oc_id}")
+
+
     # ---- Optional: inspect OS/OC table mapping ----
     S, T, table_os, table_oc = build_sets_and_params(mentors, startups)
     print("=== OS / OC TABLES PER STARTUP ===")

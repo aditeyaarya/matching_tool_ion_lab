@@ -13,6 +13,24 @@ from ..config import (
 from .domains import get_default_domains
 
 
+def _pick_os_by_fit(startup_id, mentors, fit_scores, os_load, max_os):
+    candidates = [
+        m for m in mentors if m.can_be_os and os_load[m.id] < max_os
+    ]
+    return max(candidates, key=lambda m: fit_scores[m.id][startup_id])
+
+
+def _pick_oc_by_fit(startup_id, mentors, fit_scores, os_mentor, oc_load, max_oc):
+    candidates = [
+        m for m in mentors
+        if m.can_be_oc
+        and m.id != os_mentor.id
+        and m.table_id != os_mentor.table_id
+        and oc_load[m.id] < max_oc
+    ]
+    return max(candidates, key=lambda m: fit_scores[m.id][startup_id])
+
+
 def _pick_os_mentor(
     mentors: List[Mentor],
     domain: str,
@@ -48,15 +66,14 @@ def _pick_os_mentor(
 
     return random.choice(candidates)
 
-
-# cdl_matching/data_generation/startup_factory.py
-
 def _pick_oc_mentor(
     mentors: List[Mentor],
     domain: str,
     os_mentor: Mentor,
     oc_load: Dict[str, int],
     max_oc_per_mentor: int,
+    fit_scores: Optional[Dict[str, Dict[str, float]]] = None,
+    startup_id: Optional[str] = None,
 ) -> Mentor:
     """
     Choose an OC mentor for a startup with the given domain,
@@ -103,6 +120,7 @@ def create_startups_with_os_oc(
     max_os_per_mentor: int = MAX_OS_PER_MENTOR,
     max_oc_per_mentor: int = MAX_OC_PER_MENTOR,
     seed: Optional[int] = None,
+    fit_scores: Optional[Dict] = None,
 ) -> List[Startup]:
     """
     Create `num_startups` startups with OS and OC mentors assigned such that:
@@ -112,6 +130,12 @@ def create_startups_with_os_oc(
     if seed is not None:
         random.seed(seed)
 
+    if fit_scores:
+        csv_startup_ids = list(next(iter(fit_scores.values())).keys())
+        startup_ids = csv_startup_ids  # use EXACT CSV columns
+    else:
+        startup_ids = [f"S{i}" for i in range(1, num_startups + 1)]
+        
     domains = get_default_domains()
 
     # Track per-mentor OS / OC loads
@@ -120,31 +144,22 @@ def create_startups_with_os_oc(
 
     startups: List[Startup] = []
 
-    for s_idx in range(1, num_startups + 1):
+    for sid in startup_ids:
         domain = random.choice(domains)
 
-        # Pick OS mentor (with cap and domain preference)
-        os_mentor = _pick_os_mentor(
-            mentors=mentors,
-            domain=domain,
-            os_load=os_load,
-            max_os_per_mentor=max_os_per_mentor,
-        )
-        os_load[os_mentor.id] += 1
+        if fit_scores:
+            os_mentor = _pick_os_by_fit(sid, mentors, fit_scores, os_load, max_os_per_mentor)
+            oc_mentor = _pick_oc_by_fit(sid, mentors, fit_scores, os_mentor, oc_load, max_oc_per_mentor)
+        else:
+            os_mentor = _pick_os_mentor(mentors, domain, os_load, max_os_per_mentor)
+            oc_mentor = _pick_oc_mentor(mentors, domain, os_mentor, oc_load, max_oc_per_mentor)
 
-        # Pick OC mentor (different from OS, with cap and domain preference)
-        oc_mentor = _pick_oc_mentor(
-            mentors=mentors,
-            domain=domain,
-            os_mentor=os_mentor,
-            oc_load=oc_load,
-            max_oc_per_mentor=max_oc_per_mentor,
-        )
+        os_load[os_mentor.id] += 1
         oc_load[oc_mentor.id] += 1
 
         startup = Startup(
-            id=f"S{s_idx}",
-            name=f"Startup {s_idx}",
+            id=sid,
+            name=f"Startup {sid}",
             domain=domain,
             os_id=os_mentor.id,
             oc_id=oc_mentor.id,

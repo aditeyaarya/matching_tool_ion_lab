@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import random
-from typing import List, Set
+from typing import List, Set, Optional
 
 from ..models import Mentor
 from ..config import (
@@ -12,6 +12,7 @@ from ..config import (
     MAX_MENTORS_PER_TABLE,
 )
 from .domains import get_default_domains
+from .fit_loader import load_fit_scores
 
 
 def _distribute_mentors_across_tables(
@@ -58,6 +59,7 @@ def create_mentors_for_tables(
     num_mentors_pool: int | None = None,
     min_per_table: int = MIN_MENTORS_PER_TABLE,
     max_per_table: int = MAX_MENTORS_PER_TABLE,
+    csv_mentor_ids: Optional[List[str]] = None,
 ) -> List[Mentor]:
     """
     Create mentors and assign them to tables.
@@ -116,6 +118,26 @@ def create_mentors_for_tables(
 
     mentors: List[Mentor] = []
     mentor_id_counter = 1
+
+    if csv_mentor_ids:
+        table_ids = list(range(1, num_tables + 1))
+        t_idx = 0
+
+        for mid in csv_mentor_ids:
+            mentors.append(
+                Mentor(
+                    id=mid,
+                    name=f"Mentor {mid}",
+                    table_id=table_ids[t_idx],
+                    domains=["A", "B"],
+                    can_be_os=True,
+                    can_be_oc=True,
+                )
+            )
+            t_idx = (t_idx + 1) % len(table_ids)
+
+        return mentors
+
 
     for table_idx, count in enumerate(counts_per_table, start=1):
         for _ in range(count):

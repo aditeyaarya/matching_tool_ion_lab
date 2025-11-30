@@ -34,3 +34,6 @@ DEFAULT_SEED = 42
 
 MAX_OS_PER_TABLE = MAX_OS_PER_MENTOR * 3   # or simply a big number like 99
 MAX_OC_PER_TABLE = MAX_OC_PER_MENTOR * 3
+
+# Path to fit-scores CSV for toy dataset generation (if any)
+FIT_SCORES_CSV_PATH = "cdl_matching/data_generation/fit_matrix.csv"
