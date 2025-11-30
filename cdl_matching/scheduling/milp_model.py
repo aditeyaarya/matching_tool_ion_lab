@@ -10,13 +10,21 @@ def build_milp_schedule_model(
     T: Set[int],
     table_os: Dict[str, int],
     table_oc: Dict[str, int],
+    table_fit: Dict[Tuple[str, int], float],
     num_sgms: int = 3,
 ) -> Tuple[pulp.LpProblem, Dict[Tuple[str, int, int], pulp.LpVariable]]:
     """
-    MILP for scheduling startups over SGMs with OS-before-OC.
+    MILP for scheduling startups over SGMs with OS-before-OC, now with fit scores.
 
     Variables:
         x[s, t, k] = 1 if startup s is at table t in SGM k.
+
+    Objective:
+        Maximize the total table-level fit over all meetings:
+            sum_{s in S} sum_{t in T} sum_{k} table_fit[s,t] * x[s,t,k]
+
+        where table_fit[(s, t)] is typically derived from the best-fit mentor
+        at table t for startup s.
 
     Rules encoded:
 
@@ -43,18 +51,13 @@ def build_milp_schedule_model(
            OS in SGM2 AND OC in SGM2.
          So we enforce:
            ∀s: x[s, table_os[s], 2] + x[s, table_oc[s], 2] ≤ 1
-
-      (Optional) You *could* add: no startup meets the same table twice:
-           ∀s,t: sum_k x[s,t,k] ≤ 1
-         but I'm NOT adding that now, because you didn't require it
-         and it would make things stricter.
     """
 
     # ---------- Sets ----------
     sgms = list(range(1, num_sgms + 1))
 
     # ---------- Problem ----------
-    prob = pulp.LpProblem("CDL_SGM_Scheduling", pulp.LpMinimize)
+    prob = pulp.LpProblem("CDL_SGM_Scheduling", pulp.LpMaximize)
 
     # ---------- Decision variables ----------
     x: Dict[Tuple[str, int, int], pulp.LpVariable] = {}
@@ -65,9 +68,13 @@ def build_milp_schedule_model(
                     f"x_{s}_{t}_{k}", lowBound=0, upBound=1, cat="Binary"
                 )
 
-    # ---------- Objective ----------
-    # For now: pure feasibility model (no scores), so minimize 0.
-    prob += 0, "DummyObjective"
+    # ---------- Objective: maximize total fit ----------
+    prob += pulp.lpSum(
+        table_fit.get((s, t), 0.0) * x[(s, t, k)]
+        for s in S
+        for t in T
+        for k in sgms
+    ), "MaximizeTotalFit"
 
     # ---------- Constraints ----------
 

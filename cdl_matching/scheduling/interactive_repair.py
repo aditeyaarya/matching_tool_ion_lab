@@ -13,6 +13,7 @@ from ..config import (
 from ..data_generation.toy_dataset import make_toy_dataset
 from .diagnostics import analyze_session_feasibility
 from .sets_and_params import build_sets_and_params
+from .solve import solve_schedule  # MILP feasibility check
 
 
 def _index_mentors_by_id(mentors: List[Mentor]) -> Dict[str, Mentor]:
@@ -101,7 +102,9 @@ def _choose_startup_for_overloaded_table_with_score(
     scored.append((best_st.id, best_score))
 
     for st in candidates[1:]:
-        sc = _score_startup(st, table_os, table_oc, os_overload, oc_overload, total_overload)
+        sc = _score_startup(
+            st, table_os, table_oc, os_overload, oc_overload, total_overload
+        )
         scored.append((st.id, sc))
         if sc > best_score:
             best_score = sc
@@ -210,6 +213,7 @@ def _auto_fix_one_overload(
         oc_count = sum(1 for s in S if table_oc[s] == bad_table)
         role = "OS" if os_count >= oc_count else "OC"
     else:
+        # No overloaded tables to fix
         return False
 
     # Pick startup to modify using score
@@ -273,29 +277,23 @@ def interactive_build_session(
     num_startups: int = NUM_STARTUPS_DEFAULT,
     mentors_per_table: int = MENTORS_PER_TABLE_DEFAULT,
     num_sgms: int = 3,
-    max_rounds: int = 10,
+    max_rounds: int = 50,
 ) -> Tuple[List[Mentor], List[Startup]]:
     """
-    High-level loop:
-      - generate mentors + startups
+    Automatic repair loop:
+      - generate mentors + startups + fit matrix
       - run diagnostics
-      - if infeasible, ask user whether to:
-          * auto-fix OS/OC assignments (guided by scores)
-          * increase tables
-          * decrease startups
-          * regenerate from scratch
-      - repeat until structurally feasible or max_rounds hit
+      - automatically perform OS/OC reassignment (guided by scores)
+      - keep looping until:
+          * MILP schedule is feasible, OR
+          * no further valid OS/OC move exists (we declare no feasible solution)
 
-    IMPORTANT:
-      - We now KEEP the same mentors/startups across rounds unless the
-        user explicitly chooses to regenerate/change tables/startups.
-        This way, auto-fixes actually accumulate instead of being
-        thrown away every loop.
+    No user input, no menu of options.
     """
     round_idx = 0
 
-    # Initial generation
-    mentors, startups = make_toy_dataset(
+    # Initial generation – keep mentor_fit for MILP
+    mentors, startups, mentor_fit = make_toy_dataset(
         num_tables=num_tables,
         num_startups=num_startups,
         mentors_per_table=mentors_per_table,
@@ -306,6 +304,7 @@ def interactive_build_session(
         print(f"\n========== ROUND {round_idx} ==========")
         print(f"Current settings: tables={num_tables}, startups={num_startups}")
 
+        # 1) Structural diagnostics
         diag = analyze_session_feasibility(
             mentors,
             startups,
@@ -322,23 +321,13 @@ def interactive_build_session(
             print("- No structural capacity issues detected.")
         print("Suggestion:", diag["suggestion"])
 
-        if diag["ok"]:
-            print("\n✅ Session is structurally feasible.")
-            return mentors, startups
-
-        if round_idx >= max_rounds:
-            print("\n❌ Reached maximum rounds without feasibility.")
-            return mentors, startups
-
         # Compute overload magnitudes per table
         os_counts = diag["os_table_counts"]
         oc_counts = diag["oc_table_counts"]
         total_counts = diag["total_table_meetings"]
 
-        # OS allowed in SGM1 & SGM2 → at most 2 OS per table
-        max_os_per_table = len((1, 2))
-        # OC allowed in SGM2 & SGM3 → at most 2 OC per table
-        max_oc_per_table = len((2, 3))
+        max_os_per_table = len((1, 2))  # OS allowed in SGM1 & SGM2
+        max_oc_per_table = len((2, 3))  # OC allowed in SGM2 & SGM3
 
         os_overload: Dict[int, int] = {
             t: max(0, c - max_os_per_table) for t, c in os_counts.items()
@@ -358,17 +347,27 @@ def interactive_build_session(
         print("Overloaded OC tables:", oc_over)
         print("Overloaded TOTAL tables (OS+OC > SGMs):", total_over)
 
-        print(
-            "\nChoose an action:\n"
-            "  1) Try automatic OS/OC reassignment (guided by scores)\n"
-            "  2) Increase number of tables by 1 (regenerate)\n"
-            "  3) Decrease number of startups by 1 (regenerate)\n"
-            "  4) Regenerate from scratch with same settings\n"
-            "  5) Abort\n"
-        )
-        choice = input("Your choice [1-5]: ").strip()
+        # 2) If structurally OK, test MILP feasibility
+        if diag["ok"]:
+            print("\n[CHECK] Structural capacity OK. Checking MILP feasibility...")
+            status, sol = solve_schedule(
+                mentors,
+                startups,
+                mentor_fit,
+                num_sgms=num_sgms,
+            )
+            print(f"[MILP] Solver status: {status}")
 
-        if choice == "1":
+            if status in ("Optimal", "Feasible"):
+                print("\n✅ Session is structurally AND MILP-feasible.")
+                return mentors, startups
+
+            # MILP infeasible despite structural OK
+            print(
+                "\n[MILP] Infeasible even though structural checks pass. "
+                "Trying further OS/OC reassignment (if any possible)..."
+            )
+
             fixed = _auto_fix_one_overload(
                 mentors,
                 startups,
@@ -384,70 +383,54 @@ def interactive_build_session(
             )
             if not fixed:
                 print(
-                    "Could not find a valid OS/OC reassignment that respects "
-                    "per-mentor, per-table, and total capacity. Try another action."
+                    "\n❌ No further OS/OC reassignment possible. "
+                    "Under current constraints, there appears to be "
+                    "no mathematically feasible schedule."
                 )
-            else:
-                # After in-place fix, re-run diagnostics on SAME mentors/startups
-                diag2 = analyze_session_feasibility(
-                    mentors,
-                    startups,
-                    num_sgms=num_sgms,
-                    os_sgms_allowed=(1, 2),
-                    oc_sgms_allowed=(2, 3),
+                return mentors, startups
+
+            if round_idx >= max_rounds:
+                print(
+                    "\n❌ Reached maximum automatic repair rounds "
+                    "without finding a MILP-feasible schedule."
                 )
-                print("\n=== DIAGNOSTICS AFTER AUTO-FIX ===")
-                if diag2["messages"]:
-                    for msg in diag2["messages"]:
-                        print("-", msg)
-                else:
-                    print("- No structural capacity issues detected.")
-                print("Suggestion:", diag2["suggestion"])
+                return mentors, startups
 
-                if diag2["ok"]:
-                    print("\n✅ After auto-fix, session is structurally feasible.")
-                    return mentors, startups
-                else:
-                    print("\nStill infeasible after auto-fix, continuing loop...")
-                    # IMPORTANT: we do NOT regenerate here; we keep the modified
-                    # mentors/startups and go to the next round.
-                    continue
+            # If fixed == True, loop continues to next round
+            continue
 
-        elif choice == "2":
-            num_tables += 1
-            print(f"➡ Increasing tables to {num_tables} and regenerating...\n")
-            mentors, startups = make_toy_dataset(
-                num_tables=num_tables,
-                num_startups=num_startups,
-                mentors_per_table=mentors_per_table,
+        # 3) If structurally NOT OK, auto-fix overloads
+        print("\n[REPAIR] Structural issues detected. Trying automatic OS/OC reassignment...")
+        fixed = _auto_fix_one_overload(
+            mentors,
+            startups,
+            os_over,
+            oc_over,
+            total_over,
+            os_overload,
+            oc_overload,
+            total_overload,
+            max_os_per_table,
+            max_oc_per_table,
+            num_sgms,
+        )
+
+        if not fixed:
+            print(
+                "\n❌ Structural issues remain and no valid OS/OC reassignment "
+                "can be found that respects per-mentor, per-table, and total capacity."
             )
-            continue
-
-        elif choice == "3":
-            if num_startups <= 1:
-                print("Cannot reduce startups below 1.")
-            else:
-                num_startups -= 1
-                print(f"➡ Decreasing startups to {num_startups} and regenerating...\n")
-                mentors, startups = make_toy_dataset(
-                    num_tables=num_tables,
-                    num_startups=num_startups,
-                    mentors_per_table=mentors_per_table,
-                )
-            continue
-
-        elif choice == "4":
-            print("➡ Regenerating from scratch with same settings...\n")
-            mentors, startups = make_toy_dataset(
-                num_tables=num_tables,
-                num_startups=num_startups,
-                mentors_per_table=mentors_per_table,
+            print(
+                "Under current layout (tables, mentors, startups), there appears "
+                "to be no mathematically feasible solution."
             )
-            continue
-
-        elif choice == "5":
-            print("Aborting interactive build.")
             return mentors, startups
 
-        else:
-            print("Invalid choice, please select 1–5.")
+        if round_idx >= max_rounds:
+            print(
+                "\n❌ Reached maximum automatic repair rounds. "
+                "Likely no feasible solution under these constraints."
+            )
+            return mentors, startups
+
+        # Otherwise, we applied a fix → continue loop with updated mentors/startups.

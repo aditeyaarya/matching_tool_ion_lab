@@ -1,8 +1,10 @@
 # run_toy.py
 
+import pandas as pd
+
 from cdl_matching.config import NUM_STARTUPS_DEFAULT
 from cdl_matching.data_generation.toy_dataset import make_toy_dataset
-from cdl_matching.scheduling.solve import solve_schedule
+from cdl_matching.scheduling.solve import solve_schedule, _build_table_fit
 from cdl_matching.scheduling.diagnostics import analyze_session_feasibility
 from cdl_matching.scheduling.sets_and_params import build_sets_and_params
 
@@ -12,13 +14,53 @@ def main():
     num_tables = 10
     num_sgms = 3
 
-    # ---- Generate toy mentors + startups ----
-    mentors, startups = make_toy_dataset(
+    # ---- Generate toy mentors + startups + fit scores ----
+    mentors, startups, mentor_fit = make_toy_dataset(
         num_tables=num_tables,
         num_startups=NUM_STARTUPS_DEFAULT,
         mentors_per_table=3,
         num_mentors_pool=35,  # global pool; extra mentors conceptually unused
     )
+
+    # ============================
+    #  PRINT FIT MATRICES (PANDAS)
+    # ============================
+
+    # Mentor–Startup fit matrix
+    mentor_ids = [m.id for m in mentors]
+    startup_ids = sorted(s.id for s in startups)
+
+    mentor_startup_matrix = [
+        [mentor_fit[(sid, mid)] for mid in mentor_ids]
+        for sid in startup_ids
+    ]
+    df_ms = pd.DataFrame(
+        mentor_startup_matrix,
+        index=startup_ids,
+        columns=mentor_ids,
+    )
+
+    print("=== MENTOR–STARTUP FIT MATRIX (0–1) ===")
+    print(df_ms.round(2))
+    print()
+
+    # Table–Startup fit matrix (what the MILP actually uses)
+    table_fit = _build_table_fit(mentors, startups, mentor_fit)
+    tables = sorted({m.table_id for m in mentors})
+
+    table_startup_matrix = [
+        [table_fit[(sid, t)] for t in tables]
+        for sid in startup_ids
+    ]
+    df_ts = pd.DataFrame(
+        table_startup_matrix,
+        index=startup_ids,
+        columns=[f"Table {t}" for t in tables],
+    )
+
+    print("=== TABLE–STARTUP FIT MATRIX (max mentor fit per table) ===")
+    print(df_ts.round(2))
+    print()
 
     # ---- Optional: inspect OS/OC table mapping ----
     S, T, table_os, table_oc = build_sets_and_params(mentors, startups)
@@ -49,8 +91,13 @@ def main():
         print("Skipping MILP solve because the session is structurally infeasible.")
         return
 
-    # ---- Run MILP solve ----
-    status, sol = solve_schedule(mentors, startups, num_sgms=num_sgms)
+    # ---- Run MILP solve (fit-aware) ----
+    status, sol = solve_schedule(
+        mentors,
+        startups,
+        mentor_fit,
+        num_sgms=num_sgms,
+    )
     print("Solver status:", status)
     print()
 

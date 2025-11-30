@@ -1,5 +1,9 @@
 # run_interactive.py
 
+from __future__ import annotations
+
+import random
+
 from cdl_matching.scheduling.interactive_repair import interactive_build_session
 from cdl_matching.scheduling.solve import solve_schedule
 from cdl_matching.scheduling.diagnostics import analyze_session_feasibility
@@ -25,6 +29,14 @@ def main():
     print("\n========== SESSION SUMMARY ==========")
     print(f"- Number of tables   : {num_tables}")
     print(f"- Number of startups : {num_startups}")
+
+    # 1b) Build random mentor–startup fit scores in [0, 1]
+    # Key: (startup_id, mentor_id) -> float
+    rng = random.Random(42)  # fixed seed for reproducibility; change/remove if you want
+    mentor_fit = {}
+    for st in startups:
+        for m in mentors:
+            mentor_fit[(st.id, m.id)] = rng.random()
 
     # 2) Final structural check BEFORE running the MILP
     print("\n=== FINAL STRUCTURAL CHECK ===")
@@ -63,8 +75,13 @@ def main():
         print("Please adjust: add tables / reduce startups / change OS/OC assignments.")
         return
 
-    # 3) If structurally OK, run the MILP solver
-    status, sol = solve_schedule(mentors, startups, num_sgms=3)
+    # 3) If structurally OK, run the MILP solver (fit-aware)
+    status, sol = solve_schedule(
+        mentors,
+        startups,
+        mentor_fit,
+        num_sgms=3,
+    )
     print("\nSolver status:", status)
 
     if status not in ("Optimal", "Feasible"):
