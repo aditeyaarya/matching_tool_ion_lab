@@ -2,19 +2,18 @@
 
 import pandas as pd
 
+from cdl_matching.scheduling.joint_milp import solve_joint_schedule
 from cdl_matching.config import NUM_STARTUPS_DEFAULT
 from cdl_matching.data_generation.toy_dataset import make_toy_dataset
-from cdl_matching.scheduling.solve import solve_schedule, _build_table_fit
-from cdl_matching.scheduling.diagnostics import analyze_session_feasibility
-from cdl_matching.scheduling.sets_and_params import build_sets_and_params
+from cdl_matching.scheduling.solve import _build_table_fit
 
 
 def optimize_mentor_selection(
     mentors: list,
     startups: list,
     mentor_fit: dict,
-    target_count: int = 9,
-    target_tables: int = 3
+    target_count: int = 30,
+    target_tables: int = 10
 ) -> list:
     """
     Select the best `target_count` mentors based on fit scores and
@@ -22,28 +21,20 @@ def optimize_mentor_selection(
     """
     print(f"\n[OPTIMIZATION] Selecting top {target_count} mentors for {len(startups)} startups...")
 
-    # 1. Score each mentor
-    # Heuristic: Sum of top 3 fit scores (since each mentor can meet at most 3 startups)
-    # Or simply: Is this mentor in the Top N for any startup?
-    
+    # 1. Score each mentor (sum of top fit scores per startup)
     mentor_scores = {m.id: 0.0 for m in mentors}
     
-    # For each startup, find their favorite mentors
     for s in startups:
-        # Get all fits for this startup
         fits = []
         for m in mentors:
             score = mentor_fit.get((s.id, m.id), 0.0)
             fits.append((score, m.id))
         
-        # Sort descending
         fits.sort(key=lambda x: x[0], reverse=True)
         
-        # Give points to the top candidates
-        # Top 1 gets 3 pts, Top 2 gets 2 pts, Top 3 gets 1 pt
-        for i in range(min(len(fits), 5)):  # Look at top 5 to be safe
+        # Give more weight to higher-ranked mentors
+        for i in range(min(len(fits), 5)):
             score, mid = fits[i]
-            # Add the raw fit score to the mentor's utility
             mentor_scores[mid] += score
 
     # 2. Select top N mentors
@@ -53,11 +44,7 @@ def optimize_mentor_selection(
     selected_ids = {m.id for m in selected_mentors}
     print(f"[OPTIMIZATION] Selected Mentors: {sorted(list(selected_ids))}")
     
-    # 3. Redistribute across tables (Round Robin)
-    # We want to mix them up so one table doesn't get all the best ones
-    # (though with 3 tables and 3 slots, it matters less, but good practice)
-    
-    # Sort by ID for deterministic seating
+    # 3. Redistribute across tables (round-robin across target_tables)
     selected_mentors.sort(key=lambda m: m.id)
     
     for i, m in enumerate(selected_mentors):
@@ -66,6 +53,8 @@ def optimize_mentor_selection(
         
     print(f"[OPTIMIZATION] Redistributed {len(selected_mentors)} mentors across {target_tables} tables.")
     return selected_mentors
+
+
 def main():
     # ---- Session settings ----
     import os
@@ -79,6 +68,7 @@ def main():
     # If CSV exists, override settings to match the data
     num_startups = NUM_STARTUPS_DEFAULT
     num_mentors_pool = 35
+    fit_data = None
     
     if os.path.exists(FIT_SCORES_CSV_PATH):
         print(f"Found CSV at {FIT_SCORES_CSV_PATH}. Loading full dataset...")
@@ -93,39 +83,32 @@ def main():
             
             # Initial tables - enough to hold everyone
             num_tables = math.ceil(num_mentors_pool / MENTORS_PER_TABLE_DEFAULT)
-            if num_tables < 1: num_tables = 1
+            if num_tables < 1:
+                num_tables = 1
 
-    # ---- OPTIMIZE: Select best 9 mentors / 3 tables ----
-    # Only if we have enough mentors to optimize
-    target_mentors = 9
-    target_tables = 3
     # ---- Generate toy mentors + startups + fit scores ----
+    target_mentors = 30
+    target_tables = 10
+
     mentors, startups, mentor_fit = make_toy_dataset(
         num_tables=num_tables,
         num_startups=num_startups,
         mentors_per_table=3,
         num_mentors_pool=num_mentors_pool,
-        fit_matrix=fit_data if 'fit_data' in locals() else None
+        fit_matrix=fit_data if fit_data is not None else None,
     )
 
+    # Optional: shrink mentor pool via heuristic pre-selection
     if len(mentors) > target_mentors:
         mentors = optimize_mentor_selection(
-            mentors, 
-            startups, 
-            mentor_fit, 
-            target_count=target_mentors, 
-            target_tables=target_tables
+            mentors,
+            startups,
+            mentor_fit,
+            target_count=target_mentors,
+            target_tables=target_tables,
         )
-        
-        # Re-assign OS/OC based on the new subset
-        from cdl_matching.data_generation.startup_factory import create_startups_with_os_oc
-        print("[OPTIMIZATION] Re-assigning OS/OC mentors from the selected subset...")
-        startups = create_startups_with_os_oc(
-            mentors=mentors,
-            num_startups=num_startups,
-            seed=42,
-            mentor_fit=mentor_fit
-        )
+        # Note: startups keep their domains and IDs; OS/OC will be overwritten
+        # later by the joint MILP, so no need to re-run create_startups_with_os_oc.
 
     # ============================
     #  PRINT FIT MATRICES (PANDAS)
@@ -159,7 +142,7 @@ def main():
         print(f"Table {t}: {', '.join(m_ids)}")
     print()
 
-    # Table–Startup fit matrix (what the MILP actually uses)
+    # Table–Startup fit matrix (for inspection only)
     table_fit = _build_table_fit(mentors, startups, mentor_fit)
     tables = sorted({m.table_id for m in mentors})
 
@@ -177,25 +160,8 @@ def main():
     print(df_ts.round(2))
     print()
 
-    # ---- Optional: inspect OS/OC table mapping ----
-    S, T, table_os, table_oc = build_sets_and_params(mentors, startups)
-    print("=== OS / OC TABLES PER STARTUP (VERIFICATION) ===")
-    mentor_map = {m.id: m for m in mentors}
+    print("\n=== MENTOR GROUPING ANALYSIS (Top-3 per startup from CURRENT mentor pool) ===")
     for s in sorted(startups, key=lambda x: x.id):
-        os_m = mentor_map.get(s.os_id)
-        oc_m = mentor_map.get(s.oc_id)
-        
-        print(f"{s.id}:")
-        print(f"  - OS: {s.os_id} (Table {os_m.table_id if os_m else 'None'}) ")
-        print(f"  - OC: {s.oc_id} (Table {oc_m.table_id if oc_m else 'None'}) ")
-
-    print("\n=== MENTOR GROUPING ANALYSIS ===")
-    # Check if the "Best" mentors for each startup are actually selected/present
-    for s in sorted(startups, key=lambda x: x.id):
-        # Find top 3 mentors for this startup in the ENTIRE pool (if we had access) 
-        # or just check if the current high-scorers are grouped well.
-        # Let's list the top 3 mentors available in the 'mentors' list for this startup
-        
         my_fits = []
         for m in mentors:
             my_fits.append((mentor_fit.get((s.id, m.id), 0.0), m))
@@ -207,30 +173,11 @@ def main():
             print(f"  - {m.id} (Score {score:.2f}) @ Table {m.table_id}")
     print()
 
-    # ---- Run structural diagnostics BEFORE solving ----
-    diag = analyze_session_feasibility(
-        mentors,
-        startups,
-        num_sgms=num_sgms,
-        os_sgms_allowed=(1, 2),
-        oc_sgms_allowed=(2, 3),
-    )
-
-    print("=== DIAGNOSTICS ===")
-    if diag["messages"]:
-        for msg in diag["messages"]:
-            print("-", msg)
-    else:
-        print("- No structural capacity issues detected.")
-    print("Suggestion:", diag["suggestion"])
-    print()
-
-    if not diag["ok"]:
-        print("Skipping MILP solve because the session is structurally infeasible.")
-        return
-
-    # ---- Run MILP solve (fit-aware) ----
-    status, sol = solve_schedule(
+    # =====================================
+    #  JOINT MILP: mentor selection + SGMs
+    # =====================================
+    print("=== JOINT MILP: OS/OC SELECTION + SCHEDULING ===")
+    status, sol, os_assign, oc_assign = solve_joint_schedule(
         mentors,
         startups,
         mentor_fit,
@@ -240,8 +187,23 @@ def main():
     print()
 
     if status not in ("Optimal", "Feasible"):
-        print("No valid schedule – model is", status)
+        print("No valid joint schedule – model is", status)
         return
+
+    # ---- Print chosen OS/OC per startup ----
+    print("=== OS / OC MENTORS PER STARTUP (from joint MILP) ===")
+    mentor_map = {m.id: m for m in mentors}
+    for s in sorted(startups, key=lambda x: x.id):
+        os_id = os_assign.get(s.id, None)
+        oc_id = oc_assign.get(s.id, None)
+
+        os_m = mentor_map.get(os_id) if os_id else None
+        oc_m = mentor_map.get(oc_id) if oc_id else None
+
+        print(f"{s.id}:")
+        print(f"  - OS: {os_id} (Table {os_m.table_id if os_m else 'None'})")
+        print(f"  - OC: {oc_id} (Table {oc_m.table_id if oc_m else 'None'})")
+    print()
 
     # ---- Pretty print schedule: SGM × Table ----
     tables = sorted({m.table_id for m in mentors})
@@ -251,41 +213,44 @@ def main():
         print(f"=== SGM {k} ===")
         for t in tables:
             startup_here = [
-                s for (s, tt, kk), v in sol.items()
+                s_id for (s_id, tt, kk), v in sol.items()
                 if v == 1 and tt == t and kk == k
             ]
             label = startup_here[0] if startup_here else "-"
-            print(f"Table {t}: {label}")
+            mentors_here = ", ".join(
+                sorted(m.id for m in mentors if m.table_id == t)
+            ) or "–"
+            print(f"Table {t} [{mentors_here}]: {label}")
         print()
 
-    print("=== VERIFICATION: OS BEFORE OC ===")
-    # Extract meeting times for each startup
-    startup_schedule = {s.id: {} for s in startups}
+    # ---- Verification: OS in {1,2}, OC in {2,3}, and OS < OC ----
+    print("=== VERIFICATION: OS IN {1,2}, OC IN {2,3}, OS < OC ===")
+    startup_schedule = {s.id: [] for s in startups}
     for (s_id, t_id, k), v in sol.items():
         if v == 1:
-            # Find what role this table plays for this startup
-            # We need to know if t_id is the OS table or OC table for s_id
-            role = "Other"
-            if t_id == table_os.get(s_id):
-                role = "OS"
-            elif t_id == table_oc.get(s_id):
-                role = "OC"
-            
-            startup_schedule[s_id][role] = k
+            startup_schedule[s_id].append((t_id, k))
 
-    for s in startups:
-        sched = startup_schedule[s.id]
-        os_sgm = sched.get("OS")
-        oc_sgm = sched.get("OC")
-        
-        if os_sgm is not None and oc_sgm is not None:
-            status = "PASS" if os_sgm < oc_sgm else "FAIL"
-            print(f"{s.id}: OS at SGM {os_sgm}, OC at SGM {oc_sgm} -> {status}")
-        else:
-            print(f"{s.id}: Missing OS or OC meeting (OS={os_sgm}, OC={oc_sgm})")
+    for s in sorted(startups, key=lambda x: x.id):
+        os_id = os_assign.get(s.id)
+        oc_id = oc_assign.get(s.id)
+        os_table = mentor_map[os_id].table_id if os_id else None
+        oc_table = mentor_map[oc_id].table_id if oc_id else None
+
+        os_sgm = None
+        oc_sgm = None
+        for t_id, k in startup_schedule[s.id]:
+            if t_id == os_table and k in (1, 2):
+                os_sgm = k
+            if t_id == oc_table and k in (2, 3):
+                oc_sgm = k
+
+        status_flag = "PASS"
+        if os_sgm is None or oc_sgm is None or not (os_sgm < oc_sgm):
+            status_flag = "FAIL"
+
+        print(f"{s.id}: OS at SGM {os_sgm}, OC at SGM {oc_sgm} -> {status_flag}")
     print()
 
 
 if __name__ == "__main__":
     main()
-
