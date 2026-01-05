@@ -1,39 +1,19 @@
 # cdl_matching/config.py
 
-# Toy data knobs
-NUM_TABLES_DEFAULT = 10
-NUM_STARTUPS_DEFAULT = 10
-MENTORS_PER_TABLE_DEFAULT = 3
+# Defaults for running the solver
+NUM_TABLES_DEFAULT = 9
+NUM_SGMS_DEFAULT = 3
 
-# Mentor seating bounds (NEW)
+# Mentor seating bounds (solver bounds)
 MIN_MENTORS_PER_TABLE = 2
-MAX_MENTORS_PER_TABLE = 4
-
-# Optional: default global mentor pool size (NEW)
-NUM_MENTORS_POOL_DEFAULT = None
-
-# Domains for matching
-DEFAULT_DOMAINS = [
-    "AI", "FinTech", "Healthcare", "Marketing", "Robotics",
-    "ClimateTech", "Retail", "Education", "Biotech", "Cybersecurity",
-]
+MAX_MENTORS_PER_TABLE = 5
 
 # OS/OC load caps per mentor
 MAX_OS_PER_MENTOR = 3
 MAX_OC_PER_MENTOR = 3
 
-# Random seed for reproducible toy sets
+# Optional: reproducibility for toy/test instances
 DEFAULT_SEED = 42
 
-# -----------------------------------------------------------
-# Backwards-compatibility for older scheduling modules
-# -----------------------------------------------------------
-
-# Old interactive_repair.py expects table-level caps.
-# We approximate them using mentor-level caps or set to a safe high default.
-
-MAX_OS_PER_TABLE = MAX_OS_PER_MENTOR * 3   # or simply a big number like 99
-MAX_OC_PER_TABLE = MAX_OC_PER_MENTOR * 3
-
-# Path to fit-scores CSV for toy dataset generation (if any)
-FIT_SCORES_CSV_PATH = "cdl_matching/data_generation/fit_matrix_10_startups.csv"
+# Optional: default fit-score path IF you load from CSV
+FIT_SCORES_CSV_PATH = "cdl_matching/data/final_fit_scores_session_2.csv"

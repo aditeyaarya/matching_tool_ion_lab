@@ -1,24 +1,20 @@
-# cdl_matching/models.py
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Set, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
 class Mentor:
     id: str
     name: str
-    table_id: int
-    domains: Set[str]
     can_be_os: bool = True
     can_be_oc: bool = True
-    conflicts: Set[str] = field(default_factory=set)  # startup IDs or domains, up to you
+    table_id: Optional[int] = None  # optional: set post-solve if you want
 
 
 @dataclass
 class Startup:
     id: str
     name: str
-    domain: str
-    os_id: Optional[str] = None   # OS mentor ID
-    oc_id: Optional[str] = None   # OC mentor ID
+    os_id: Optional[str] = None  # set post-solve
+    oc_id: Optional[str] = None  # set post-solve
