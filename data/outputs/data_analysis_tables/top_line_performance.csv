@@ -1,0 +1,9 @@
+Metric,Definition,CDL Assignments,ION Matching (MILP),Delta
+Avg Total Fit Score (0–2),For each venture v: Fit(OS_v)+Fit(CR_v). Report the average across ventures.,1.19,1.62,+0.43
+Avg Fit per Role (0–1),Avg Total Fit Score ÷ 2 (interpretable as per-role fit).,0.59,0.81,+0.22
+Venture-level outcomes (N=18),Count ventures where TotalFit_ION is > / = / < TotalFit_CDL.,-,-,-
+• Better,# ventures with higher total fit under ION,0,17,-
+• Equal,# ventures with identical total fit,-,1,-
+• Worse,# ventures where CDL total fit is higher,-,0,-
+Better rate (%),Better ÷ N,-,94.4%,-
+Highest single match score (0–1),Max fit among all assigned OS/CR mentor pairs,1.00,1.00,+0.00
