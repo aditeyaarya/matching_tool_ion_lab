@@ -1,0 +1,116 @@
+[
+    {
+        "mentor_id": "MENTOR_001",
+        "mentor_name": "Alexander Robinson",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_002",
+        "mentor_name": "Antoine Le Feuvre",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_003",
+        "mentor_name": "Caroline Bergaud",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_004",
+        "mentor_name": "Edward G. Krubasik",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_005",
+        "mentor_name": "Elizabeth Grier",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_006",
+        "mentor_name": "Karen Strassel",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_007",
+        "mentor_name": "Laurent Bertiau",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_008",
+        "mentor_name": "Lida Preyma",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_009",
+        "mentor_name": "Lisa Aberg",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_010",
+        "mentor_name": "Mallika Mathur-Lheritier",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_011",
+        "mentor_name": "Michael Wilshire",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_012",
+        "mentor_name": "Osnat Michaeli",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_013",
+        "mentor_name": "Renaud Visage",
+        "shift1_available": true,
+        "shift2_available": false
+    },
+    {
+        "mentor_id": "MENTOR_014",
+        "mentor_name": "Tobias Suenner",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_015",
+        "mentor_name": "Aurélie Lustenberger",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_016",
+        "mentor_name": "Caroline Detalle",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_017",
+        "mentor_name": "Daniel Dib",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_018",
+        "mentor_name": "Fernando Diaz-Lopez",
+        "shift1_available": true,
+        "shift2_available": true
+    },
+    {
+        "mentor_id": "MENTOR_019",
+        "mentor_name": "Magnus Eriksson",
+        "shift1_available": true,
+        "shift2_available": true
+    }
+]

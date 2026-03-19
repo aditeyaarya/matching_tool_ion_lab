@@ -24,19 +24,22 @@ def export_post_solve_csvs(
     mentor_table_assign: Dict[str, int],                 # mentor_id -> table_id
     os_sgm: Optional[Dict[str, int]] = None,             # startup_id -> sgm (optional but recommended)
     oc_sgm: Optional[Dict[str, int]] = None,             # startup_id -> sgm (optional but recommended)
+    # NEW: fit scores (same structure as in joint_milp.py)
+    mentor_fit: Optional[Dict[Tuple[str, str], float]] = None,  # (startup_id, mentor_id) -> score
     out_dir: str = "outputs",
     prefix: str = "results",
 ) -> Dict[str, str]:
     """
     Exports 3 CSVs:
 
-    1) {prefix}_startup_os_oc.csv
-       - OS/OC per startup, with mentor names, tables, and SGMs (if provided)
+    1) {prefix}_S3_S1-startup_os_oc.csv
+       - OS/OC per startup, with mentor names, tables, SGMs (if provided),
+         and OS/OC fit scores (if mentor_fit provided)
 
-    2) {prefix}_tables_mentors.csv
+    2) {prefix}_S3_S1-tables_mentors.csv
        - Table -> mentors assigned to that table (one row per table, with a mentor list)
 
-    3) {prefix}_full_schedule.csv
+    3) {prefix}_S3_S1-full_schedule.csv
        - A combined, human-readable schedule:
            * For each SGM + table: which startup is seated there (if any),
              which mentors are at that table,
@@ -70,6 +73,16 @@ def export_post_solve_csvs(
             return None
         t = mentor_table_assign.get(m_id)
         return int(t) if t is not None else None
+
+    def fit_score(s_id: str, m_id: Optional[str]) -> str:
+        """
+        Returns score as string for CSV stability.
+        Blank if mentor_fit not provided or missing key.
+        """
+        if not mentor_fit or not m_id:
+            return ""
+        v = mentor_fit.get((s_id, m_id))
+        return "" if v is None else f"{float(v):.6f}"
 
     # Build table -> mentors list
     table_to_mentors: Dict[int, List[str]] = {}
@@ -111,7 +124,7 @@ def export_post_solve_csvs(
         )
 
     # -----------------------------
-    # 1) Startup OS/OC CSV
+    # 1) Startup OS/OC CSV (+ scores)
     # -----------------------------
     f1 = out_path / f"{prefix}_startup_os_oc.csv"
     _ensure_dir(f1)
@@ -126,10 +139,13 @@ def export_post_solve_csvs(
                 "os_mentor_name",
                 "os_table_id",
                 "os_sgm",
+                "os_fit_score",
                 "oc_mentor_id",
                 "oc_mentor_name",
                 "oc_table_id",
                 "oc_sgm",
+                "oc_fit_score",
+                "total_os_oc_fit_score",
             ],
         )
         w.writeheader()
@@ -139,6 +155,16 @@ def export_post_solve_csvs(
             os_m = os_mentor_for_startup(s_id)
             oc_m = oc_mentor_for_startup(s_id)
 
+            os_score_str = fit_score(s_id, os_m)
+            oc_score_str = fit_score(s_id, oc_m)
+
+            total_score = ""
+            if os_score_str != "" or oc_score_str != "":
+                # treat missing as 0.0 if one side is missing but mentor_fit is present
+                os_v = float(os_score_str) if os_score_str != "" else 0.0
+                oc_v = float(oc_score_str) if oc_score_str != "" else 0.0
+                total_score = f"{(os_v + oc_v):.6f}"
+
             w.writerow(
                 {
                     "startup_id": s_id,
@@ -147,10 +173,13 @@ def export_post_solve_csvs(
                     "os_mentor_name": mentor_name(os_m),
                     "os_table_id": table_of_mentor(os_m) if os_m else "",
                     "os_sgm": (os_sgm.get(s_id) if os_sgm else "") or "",
+                    "os_fit_score": os_score_str,
                     "oc_mentor_id": oc_m or "",
                     "oc_mentor_name": mentor_name(oc_m),
                     "oc_table_id": table_of_mentor(oc_m) if oc_m else "",
                     "oc_sgm": (oc_sgm.get(s_id) if oc_sgm else "") or "",
+                    "oc_fit_score": oc_score_str,
+                    "total_os_oc_fit_score": total_score,
                 }
             )
 

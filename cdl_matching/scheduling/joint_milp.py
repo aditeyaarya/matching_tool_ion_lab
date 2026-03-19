@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple
 import pulp
 
 from cdl_matching.models import Mentor, Startup
-from cdl_matching.config import MAX_OS_PER_MENTOR, MAX_OC_PER_MENTOR
+from cdl_matching.config import MAX_OS_PER_MENTOR, MAX_OC_PER_MENTOR, MAX_TOTAL_OS_OC_PER_MENTOR
 
 
 def solve_joint_schedule(
@@ -264,17 +264,15 @@ def solve_joint_schedule(
             )
 
     # L) Mentor OS/OC caps
+# L) TOTAL OS + OC cap per mentor
     for m_id in M_ids:
         prob += (
             pulp.lpSum(w_os[(s_id, m_id, k)] for s_id in S_ids for k in OS_SGMS)
-            <= MAX_OS_PER_MENTOR,
-            f"OS_cap_{m_id}",
+            + pulp.lpSum(w_oc[(s_id, m_id, k)] for s_id in S_ids for k in OC_SGMS)
+            <= MAX_TOTAL_OS_OC_PER_MENTOR,
+            f"TOTAL_OS_OC_cap_{m_id}",
         )
-        prob += (
-            pulp.lpSum(w_oc[(s_id, m_id, k)] for s_id in S_ids for k in OC_SGMS)
-            <= MAX_OC_PER_MENTOR,
-            f"OC_cap_{m_id}",
-        )
+
 
     # M) OS-before-OC
     for s_id in S_ids:

@@ -9,11 +9,12 @@ MIN_MENTORS_PER_TABLE = 2
 MAX_MENTORS_PER_TABLE = 5
 
 # OS/OC load caps per mentor
-MAX_OS_PER_MENTOR = 3
-MAX_OC_PER_MENTOR = 3
+MAX_OS_PER_MENTOR = 2
+MAX_OC_PER_MENTOR = 2
+MAX_TOTAL_OS_OC_PER_MENTOR = 1
 
 # Optional: reproducibility for toy/test instances
 DEFAULT_SEED = 42
 
 # Optional: default fit-score path IF you load from CSV
-FIT_SCORES_CSV_PATH = "cdl_matching/data/final_fit_scores_session_2.csv"
+FIT_SCORES_CSV_PATH = "cdl_matching/input_data/S3_final_fit_shift2.csv"

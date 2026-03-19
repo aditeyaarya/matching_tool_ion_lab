@@ -1,0 +1,80 @@
+[
+    {
+        "startup_name": "BioHalo ApS",
+        "startup_id": "STARTUP_001",
+        "shift1_available": true,
+        "shift2_available": false
+    },
+    {
+        "startup_name": "Caplyzer",
+        "startup_id": "STARTUP_002",
+        "shift1_available": true,
+        "shift2_available": false
+    },
+    {
+        "startup_name": "co-reactive",
+        "startup_id": "STARTUP_003",
+        "shift1_available": true,
+        "shift2_available": false
+    },
+    {
+        "startup_name": "Mykor Ltd",
+        "startup_id": "STARTUP_004",
+        "shift1_available": false,
+        "shift2_available": true
+    },
+    {
+        "startup_name": "Heatrix GmbH",
+        "startup_id": "STARTUP_005",
+        "shift1_available": true,
+        "shift2_available": false
+    },
+    {
+        "startup_name": "Valence Technologies",
+        "startup_id": "STARTUP_006",
+        "shift1_available": false,
+        "shift2_available": true
+    },
+    {
+        "startup_name": "A&B Smart Materials",
+        "startup_id": "STARTUP_007",
+        "shift1_available": true,
+        "shift2_available": false
+    },
+    {
+        "startup_name": "CURA Climate Inc.",
+        "startup_id": "STARTUP_008",
+        "shift1_available": false,
+        "shift2_available": true
+    },
+    {
+        "startup_name": "M4LIFE",
+        "startup_id": "STARTUP_009",
+        "shift1_available": false,
+        "shift2_available": true
+    },
+    {
+        "startup_name": "PhaseTree",
+        "startup_id": "STARTUP_010",
+        "shift1_available": false,
+        "shift2_available": true
+    },
+    {
+        "startup_name": "HalioGen Power",
+        "startup_id": "STARTUP_011",
+        "shift1_available": true,
+        "shift2_available": false
+    },
+    {
+        "startup_name": "Intace",
+        "startup_id": "STARTUP_012",
+        "shift1_available": false,
+        "shift2_available": true
+    },
+    {
+        "startup_name": "Aerleum",
+        "startup_id": "STARTUP_013",
+        "shift1_available": true,
+        "shift2_available": false
+    }
+]
