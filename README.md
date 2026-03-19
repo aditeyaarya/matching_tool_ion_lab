@@ -1,177 +1,80 @@
-# Scheduling System
+# CDL Matching & Scheduling Joint MILP System
 
-A sophisticated optimization system for matching mentors with startups and scheduling their meetings across multiple time slots, ensuring optimal fit while respecting operational constraints.
+A sophisticated Mixed Integer Linear Programming (MILP) optimization tool for jointly matching mentors with startups (for OS and OC roles) and simultaneously scheduling their meetings across multiple Small Group Meetings (SGMs). The solver optimally assigns roles and schedules meetings while respecting all operational constraints.
 
 ## Overview
 
-This system solves a complex multi-objective optimization problem:
-1. **Select** the best subset of mentors from a larger pool
-2. **Assign** mentors to tables to maximize startup-mentor fit
-3. **Schedule** meetings across time slots (SGMs) while respecting constraints
-4. **Verify** that all startups receive high-quality mentorship
+The system addresses a multi-objective optimization problem:
+1. **Assigns Mentors to Startups:** Chooses Operational Support (OS) and Operational Coach (OC) mentors for each startup to maximize total fit scores.
+2. **Assigns Mentors to Tables:** Distributes mentors across physical/virtual tables dynamically.
+3. **Schedules Meetings:** Dictates which startup visits which table in which SGM (time slot).
+4. **Denormalizes output:** Post-processes the anonymous schedules by mapping IDs back to human-readable mentor and startup names.
 
 ## Key Features
 
-- **Optimal Mentor Selection**: Heuristic-based selection to minimize costs while maximizing fit
-- **MILP Scheduling**: Mixed Integer Linear Programming for optimal time slot assignments
--  **Constraint Satisfaction**: Ensures OS meetings before OC meetings, table capacity limits, etc.
--  **Comprehensive Verification**: Multi-level checks for quality and correctness
-- **Extensive Testing**: pytest-based test suite with multiple scenarios
-
-## Quick Start
-
-### Prerequisites
-```bash
-pip install pulp pandas pytest
-```
-
-### Run the Main Algorithm
-```bash
-python3 run_toy.py
-```
-
-This will:
-1. Load mentor-startup fit scores from `cdl_matching/data_generation/fit_matrix.csv`
-2. Select the top 9 mentors from 15
-3. Assign them to 3 tables
-4. Schedule 3 meetings per startup across 3 time slots (SGMs)
-5. Display comprehensive diagnostics and verification
-
-### Run Tests
-```bash
-pytest tests/test_scenarios.py -v
-```
+- **Optimal Joint Selection & Scheduling:** Instead of sequentially assigning roles and then scheduling, the system uses a Joint MILP formulation to handle selection and scheduling simultaneously via Python's `pulp` and CBC solver.
+- **Constraints Satisfaction:** Validates that:
+  - Startup visits each table at most once across the day.
+  - OS meetings occur in SGMs 1 or 2, and OC meetings in SGMs 2 or 3.
+  - OS meetings always occur *before* OC meetings for each startup.
+  - Tables maintain configurable min/max capacities (e.g., 2 to 5 mentors).
+  - Configurable penalties for overloading tables beyond preferred capacities.
+- **Automated Denormalization:** Integrates an automated script (`mapping.py`) to map anonymous internal pseudo IDs (e.g., `MENTOR_001`) back to their real names via JSON lookup files.
 
 ## Project Structure
 
 ```
-matching_tool_ion_lab/
+MILP_matching_tool/
 ├── cdl_matching/
-│   ├── config.py                    # Configuration constants
-│   ├── models.py                    # Data models (Mentor, Startup)
-│   ├── data_generation/
-│   │   ├── fit_matrix.csv          # Mentor-startup fit scores (0-1)
-│   │   ├── toy_dataset.py          # Data generation utilities
-│   │   ├── mentor_factory.py       # Mentor creation logic
-│   │   └── startup_factory.py      # Startup creation & OS/OC assignment
-│   ├── optimization/
-│   │   └── selector.py             # MILP-based mentor selector (experimental)
+│   ├── config.py                 # Configuration constraints limits (e.g. max OS per mentor)
+│   ├── models.py                 # Core Data models (Mentor, Startup)
+│   ├── input_data/               # Fit matrices and naming maps (JSON)
 │   └── scheduling/
-│       ├── milp_model.py           # MILP scheduling model
-│       ├── solve.py                # Scheduling solver
-│       ├── diagnostics.py          # Feasibility checks
-│       └── sets_and_params.py      # Helper utilities
-├── tests/
-│   └── test_scenarios.py           # Comprehensive test suite
-├── run_toy.py                       # Main execution script
-├── run_tests.py                     # Ad-hoc test runner
-└── README.md                        # This file
+│       ├── joint_milp.py         # MILP constraint formulation and solver setup
+│       └── post_solve_export.py  # Utility functions to build output CSVs
+├── data/
+│   ├── outputs/                  # Raw anonymous CSVs exported by run_joint_milp.py
+│   └── final_results/            # Combined & Denormalized CSVs exported by mapping.py
+├── mapping.py                    # Maps pseudo IDs to real names to generate final results
+├── run_joint_milp.py             # Main entrypoint script to run the joint solver
+└── README.md                     # You're reading this!
 ```
 
-## Algorithm Workflow
+## Prerequisites
 
-### Phase 1: Mentor Selection
-- **Input**: Pool of N mentors, M startups
-- **Output**: Top K mentors (e.g., 9 from 15)
-- **Method**: Heuristic scoring based on sum of top-5 fit scores per mentor
-
-### Phase 2: Table Assignment
-- **Input**: Selected mentors
-- **Output**: Mentors distributed across T tables (e.g., 3 tables)
-- **Method**: Round-robin assignment for even distribution
-
-### Phase 3: OS/OC Assignment
-- **Input**: Mentors, startups, fit scores
-- **Output**: Each startup assigned an OS (Operational Support) and OC (Operational Coach) mentor
-- **Constraints**:
-  - OS = Best-fit mentor for the startup
-  - OC = 2nd-best mentor on a *different* table
-  - OS and OC must be on different tables
-
-### Phase 4: Scheduling (MILP)
-- **Input**: Startups, tables, time slots (SGMs), OS/OC assignments
-- **Output**: Optimal schedule assigning each startup to tables across SGMs
-- **Objective**: Maximize total fit scores
-- **Constraints**:
-  - Each startup meets at exactly 3 tables
-  - Each table hosts max 1 meeting per SGM
-  - OS meeting must occur before OC meeting
-  - OS meetings only in SGM 1-2
-  - OC meetings only in SGM 2-3
-
-### Phase 5: Verification
-- OS meetings occur before OC meetings
-- All startups have access to high-fit mentors
-- No structural capacity violations
-
-## Understanding the Output
-
-### Mentor-Startup Fit Matrix
-```
-    M001  M003  M004  ...
-S1  0.78  0.89  0.33  ...
-S2  0.22  0.19  0.83  ...
-```
-Values range from 0 (poor fit) to 1 (perfect fit).
-
-### Table-Startup Fit Matrix
-```
-    Table 1  Table 2  Table 3
-S1     0.94     0.89     0.76
-```
-For each (Startup, Table), shows the **best** mentor fit at that table.
-
-### Schedule
-```
-=== SGM 1 ===
-Table 1: S2  ← S2 meets their OS mentor at Table 1
-Table 2: S3
-Table 3: S1
+Install the required Python packages:
+```bash
+pip install pulp pandas
 ```
 
-## Configuration
+## Running the Optimization
 
-### Customize Fit Scores
-Edit `cdl_matching/data_generation/fit_matrix.csv`:
-```csv
-,S1,S2,S3
-M001,0.78,0.22,0.81
-M002,0.41,0.74,0.58
-...
+### 1. Solve the Problem
+
+To run the joint formulation algorithm and generate the schedule:
+```bash
+python3 run_joint_milp.py
 ```
+* **Process:** This script imports fit data (`cdl_matching/input_data/S3_final_fit_shift2.csv`), sets up the startup/mentor arrays, and configures algorithmic constraints such as table counts and exclusion rules.
+* **Output:** It populates the `data/outputs/` directory with intermediate anonymous solution files (e.g. full schedule, tables, mentor assignments).
+* **Configuration:** Edit variables like `EXCLUDE_FROM_OS_OC` and `EXCLUDE_FROM_ALGO` inside `run_joint_milp.py` to prevent specific mentors from being assigned roles.
 
-### Adjust Parameters
-In `run_toy.py`:
-```python
-target_mentors = 9      # Number of mentors to select
-target_tables = 3       # Number of tables
-num_sgms = 3           # Number of time slots
+### 2. Generate Human Readable Outputs
+
+After generating the optimal schedule mappings via the MILP execution, the results primarily use generic ids. Run the post-processing mapping script to pair them with their actual names:
+
+```bash
+python3 mapping.py
 ```
+* **Process:** `mapping.py` pairs the generated outputs against `S3_mentors_available.json` and `S3_startups_available.json` maps located typically in the `input_data/` directory.
+* **Output:** This generates the final clean, denormalized CSVs ready for operational reporting in `data/final_results/`.
 
-## Testing
+## Key Scheduling Constraints Details
 
-The test suite (`tests/test_scenarios.py`) includes:
-
-1. **test_one_startup_many_mentors**: Verifies selection works with abundant mentors
-2. **test_two_startups_few_mentors**: Tests edge case with tight constraints
-3. **test_high_fit_scores**: All mentors have high fit (0.8-1.0)
-4. **test_low_fit_scores**: All mentors have low fit (0.0-0.2)
-
-Each test verifies:
-- Solver finds optimal solution
-- OS meetings occur before OC meetings
--  Each startup has access to quality mentors
-
-## Key Constraints
-
-| Constraint | Description |
-|------------|-------------|
-| **3 Mentors/Table** | Each table has exactly 3 mentors |
-| **3 Meetings/Startup** | Each startup attends 3 tables |
-| **OS Before OC** | OS meeting must occur in an earlier SGM than OC |
-| **Different Tables** | OS and OC mentors must be on different tables |
-| **Capacity** | Each table hosts max 1 meeting per SGM |
-| **Time Windows** | OS in SGM 1-2, OC in SGM 2-3 |
+- **Time Windows:** SGMs consists of exactly 3 slots. OS meetings can be held in either SGM 1 or 2, while OC meetings in SGM 2 or 3.
+- **Table Capacity:** By default, each table must hold between 2 to 5 Mentors. 
+- **Seating Limitation:** A single Startup can only visit a single table per SGM, and cannot sit at the same table more than once throughout the day.
+- **Exclusion Check:** OS and OC mentors for the exact same startup must inherently sit at different tables.
 
 ## Troubleshooting
 
@@ -203,47 +106,3 @@ When adding new features:
 2. Update this README
 3. Run `pytest tests/test_scenarios.py -v` to verify
 
-
-## Binder Comparison and Fit Analysis
-
-This project includes tools to generate a binder-style CSV file from session outputs and analyze the fit scores of the assignments.
-
-### 1. Comparison CSV Generation
-
-**Script:** `cdl_matching/analysis/create_binder_csv.py`
-
-This script extracts mentor assignments from the optimization outputs (Sessions 1 & 2) and formats them into a single CSV file matching the structure of the original CDL binder. It maps internal IDs (e.g., `MENTOR_001`) to real names using the mapping files.
-
-**Input:**
-- `data/outputs/joint_milp_startup_os_oc_session_1.csv` & `_2.csv` (OS/OC Assignments)
-- `data/outputs/joint_milp_full_schedule_session1.csv` & `_2.csv` (Full Schedules)
-- `cdl_matching/data/comparision_os_oc/mentor_mapping.csv` (ID mapping)
-
-**Output:**
-- `cdl_matching/data/comparision_os_oc/CDL_Binder_OS_OC_Mentors_Created.csv`
-
-**Usage:**
-```bash
-python3 cdl_matching/analysis/create_binder_csv.py
-```
-
-### 2. Fit Score Statistics & Comparison
-
-**Script:** `cdl_matching/analysis/calculate_fit_stats.py`
-
-This script calculates the average fit scores for the **Objective Setter (OS)** and **Objective Critiquer (OC)** assigned to each venture. It compares the assignments in the **Original Binder** against the **Optimized Schedule** generated by this tool.
-
-**Key Metrics:**
-1.  **Original Average**: Average fit score of OS/OC in the manual binder.
-2.  **Created Average**: Average fit score of OS/OC in the optimized schedule.
-3.  **Improvement**: The gain in fit quality (+ positive means better fit).
-
-**Output:**
-- `data/outputs/comparision_os_oc/CDL_Binder_Comparison_Report.csv`: A comprehensive side-by-side report.
-
-**Usage:**
-```bash
-python3 cdl_matching/analysis/calculate_fit_stats.py
-```
-
-**Note:** Ensure `CDL_Binder_OS_OC_Mentors_Created.csv` exists (run step 1 first) before running this analysis.
